@@ -46,7 +46,9 @@ def get_prices(source, parser):
 def get_meals(uri, valid_categories, parser):
     tree = etree.parse(uri, parser)
     for day in tree.xpath("//div[@class='speise-tblhead']"):
-        date = pyopenmensa.feed.extractDate(day.text)
+        # fix for M&Atilde;&curren;rz ...
+        date = re.sub('M..rz', 'März', day.text)
+        date = pyopenmensa.feed.extractDate(date)
 
         table = day.getnext()
         for tr in table.iterchildren():
