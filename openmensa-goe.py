@@ -43,7 +43,7 @@ def get_prices(source, parser):
     return prices
 
 
-def get_meals(uri, valid_categories, parser):
+def get_meals(mensa, uri, parser):
     tree = etree.parse(uri, parser)
     for day in tree.xpath("//div[@class='speise-tblhead']"):
         # fix for M&Atilde;&curren;rz ...
@@ -52,33 +52,49 @@ def get_meals(uri, valid_categories, parser):
 
         table = day.getnext()
         for tr in table.iterchildren():
-            price_cat = tr.xpath(".//span[@class='ext_sits_preis']")
-            price_cat = price_cat[0].text
-
-            if price_cat not in valid_categories:
+            cat = tr.xpath(".//span[@class='ext_sits_preis']")
+            if not cat:
                 continue
+            c = cat[0].text
+
+            # fix <br> line break in first column
+            for br in cat[0].xpath(".//br"):
+                c += " " + br.tail
+            cat = c
+
+            # fix nordmensa inconsistency between price list and menu
+            if mensa == 'Nordmensa':
+                if "1" in cat:
+                    cat = "Stamm I Vegetarisch"
+                elif "2" in cat:
+                    cat = "Stamm II"
+                elif "3" in cat:
+                    cat = "Stamm III"
 
             meal = tr.xpath(".//span[@class='ext_sits_essen']/strong")
+            if not meal or meal[0].text is None:
+                continue
             meal = meal[0].text + " " + meal[0].tail.strip()
 
-            # remove notes about special ingreidents
+            # remove notes about special ingredients
             # e.g.
             #     "Curryfleischwurst (2,3,8) vom Schwein"
             #  -> "Curryfleischwurst vom Schwein"
             meal = re.sub(r' \(\d+(,\d+)*\)', '', meal)
 
-            yield (date, price_cat, meal)
+            yield (date, cat, meal)
 
 
-def mensa_feed(this_week_uri, next_week_uri, prices_uri,
+def mensa_feed(mensa, this_week_uri, next_week_uri, prices_uri,
                roles=('student', 'employee', 'other')):
     parser = etree.HTMLParser(encoding='utf-8', no_network=False)
     prices = get_prices(prices_uri, parser)
     builder = pyopenmensa.feed.LazyBuilder()
-    meals = itertools.chain(get_meals(this_week_uri, prices.keys(), parser),
-                            get_meals(next_week_uri, prices.keys(), parser))
+    meals = itertools.chain(get_meals(mensa, this_week_uri, parser),
+                            get_meals(mensa, next_week_uri, parser))
     for date, cat, meal in meals:
-        builder.addMeal(date, cat, meal, prices=prices[cat], roles=roles)
+        p = prices.get(cat)
+        builder.addMeal(date, cat, meal, prices=p, roles=roles)
 
     return builder.toXMLFeed()
 
@@ -95,4 +111,4 @@ if __name__ == '__main__':
     name, prices = mensae[sys.argv[1]]
     prices = 'http://studentenwerk-goettingen.de/' + prices
     this_week, next_week = meals_uri(name)
-    print(mensa_feed(this_week, next_week, prices))
+    print(mensa_feed(name, this_week, next_week, prices))
