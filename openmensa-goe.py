@@ -31,9 +31,11 @@ def meals_uri(mensa_name):
 def get_prices(source, parser):
     """Returns a dict with meal type as key and list of prices as value."""
     tree = etree.parse(source, parser)
-    table = tree.xpath("//table")[0]
+    tables = tree.xpath("//table")
+    if not tables:
+        return {}
     prices = {}
-    for row in table.getchildren():
+    for row in tables[0].getchildren():
         cols = [sub_whitespace(x.text) for x in row if x.text is not None]
         if not cols:
             continue
