@@ -28,8 +28,9 @@ def meals_uri(mensa_name):
     return this_week, next_week
 
 
-def get_prices(source, parser):
+def get_prices(source, key_map):
     """Returns a dict with meal type as key and list of prices as value."""
+    parser = etree.HTMLParser(encoding='utf-8', no_network=False)
     tree = etree.parse(source, parser)
     tables = tree.xpath("//table")
     if not tables:
@@ -42,10 +43,20 @@ def get_prices(source, parser):
         meal_type = cols.pop(0)
         if not meal_type.isspace() and cols and not cols[0].isspace():
             prices[meal_type] = cols
+
+    # workaround if the menu names on the prices page don't match the names on
+    # the menu page.
+    if key_map:
+        new_prices = {}
+        for k, v in prices.items():
+            new_key = key_map.get(k, k)
+            new_prices[new_key] = v
+        prices = new_prices
     return prices
 
 
-def get_meals(mensa, uri, parser):
+def get_meals(mensa, uri):
+    parser = etree.HTMLParser(encoding='utf-8', no_network=False)
     tree = etree.parse(uri, parser)
     for day in tree.xpath("//div[@class='speise-tblhead']"):
         # fix for M&Atilde;&curren;rz ...
@@ -87,13 +98,11 @@ def get_meals(mensa, uri, parser):
             yield (date, cat, meal)
 
 
-def mensa_feed(mensa, this_week_uri, next_week_uri, prices_uri,
+def mensa_feed(mensa, this_week_uri, next_week_uri, prices,
                roles=('student', 'employee', 'other')):
-    parser = etree.HTMLParser(encoding='utf-8', no_network=False)
-    prices = get_prices(prices_uri, parser)
     builder = pyopenmensa.feed.LazyBuilder()
-    meals = itertools.chain(get_meals(mensa, this_week_uri, parser),
-                            get_meals(mensa, next_week_uri, parser))
+    meals = itertools.chain(get_meals(mensa, this_week_uri),
+                            get_meals(mensa, next_week_uri))
     for date, cat, meal in meals:
         p = prices.get(cat)
         builder.addMeal(date, cat, meal, prices=p, roles=roles)
@@ -103,14 +112,24 @@ def mensa_feed(mensa, this_week_uri, next_week_uri, prices_uri,
 
 if __name__ == '__main__':
     mensae = {
-        'z': ('Zentralmensa', 'preise_zm.html'),
-        'n': ('Nordmensa', 'preise-nm.html'),
-        't': ('Mensa am turm', 'preise-mat.html'),
-        'i': ('Mensa Italia', 'preise-mi.html'),
-        'h': ('Bistro HAWK', 'preise-hawk.html')
+        'z': ('Zentralmensa', 'preise_zm.html', None),
+        'n': ('Nordmensa', 'preise-nm.html', None),
+        't': ('Mensa am turm', 'preise-mat.html',
+              {'Turm-Menü Vegetarisch HK': 'Turm vegetarisch',
+               'Turm 2a HK': 'Turm 2a',
+               'Turm 2b HK': 'Turm 2b',
+               'Turm 3a HK': 'Turm 3a',
+               'Vegan HK': 'Turm Vegan',
+               'Vegan Kombi': 'Turm Vegan Kombi',
+               'Leichte Küche HK': 'Turm Leichte Küche',
+               }
+              ),
+        'i': ('Mensa Italia', 'preise-mi.html', None),
+        'h': ('Bistro HAWK', 'preise-hawk.html', None)
         }
 
-    name, prices = mensae[sys.argv[1]]
-    prices = 'http://studentenwerk-goettingen.de/' + prices
+    name, prices_uri, prices_map = mensae[sys.argv[1]]
     this_week, next_week = meals_uri(name)
+    prices = get_prices('http://studentenwerk-goettingen.de/' + prices_uri,
+                        prices_map)
     print(mensa_feed(name, this_week, next_week, prices))
