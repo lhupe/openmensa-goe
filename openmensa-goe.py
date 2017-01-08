@@ -100,6 +100,7 @@ def get_meals(mensa, uri):
 
 def mensa_feed(mensa, this_week_uri, next_week_uri, prices,
                roles=('student', 'employee', 'other')):
+    prices = prices or {}
     builder = pyopenmensa.feed.LazyBuilder()
     meals = itertools.chain(get_meals(mensa, this_week_uri),
                             get_meals(mensa, next_week_uri))
@@ -130,6 +131,10 @@ if __name__ == '__main__':
 
     name, prices_uri, prices_map = mensae[sys.argv[1]]
     this_week, next_week = meals_uri(name)
-    prices = get_prices('http://studentenwerk-goettingen.de/' + prices_uri,
-                        prices_map)
-    print(mensa_feed(name, this_week, next_week, prices))
+    try:
+        prices = get_prices('http://studentenwerk-goettingen.de/' + prices_uri,
+                            prices_map)
+    except:
+        prices = None
+    feed = mensa_feed(name, this_week, next_week, prices)
+    print(feed)
