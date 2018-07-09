@@ -4,10 +4,14 @@ import sys
 import re
 import itertools
 import urllib.parse
+import urllib.request
 
 import lxml.etree as etree
 
 import pyopenmensa.feed
+
+
+BASE_HOST = 'https://www.studentenwerk-goettingen.de'
 
 
 def sub_whitespace(text):
@@ -15,7 +19,7 @@ def sub_whitespace(text):
 
 
 def meals_uri(mensa_name):
-    base = 'http://www.studentenwerk-goettingen.de/speiseplan.html?'
+    base = BASE_HOST + '/speiseplan.html?'
     params = {
         'no_cache': 1,
         'day': 7,
@@ -31,7 +35,7 @@ def meals_uri(mensa_name):
 def get_prices(source, key_map):
     """Returns a dict with meal type as key and list of prices as value."""
     parser = etree.HTMLParser(encoding='utf-8', no_network=False)
-    tree = etree.parse(source, parser)
+    tree = etree.parse(urllib.request.urlopen(source), parser)
     tables = tree.xpath("//table")
     if not tables:
         return {}
@@ -57,7 +61,7 @@ def get_prices(source, key_map):
 
 def get_meals(mensa, uri):
     parser = etree.HTMLParser(encoding='utf-8', no_network=False)
-    tree = etree.parse(uri, parser)
+    tree = etree.parse(urllib.request.urlopen(uri), parser)
     for day in tree.xpath("//div[@class='speise-tblhead']"):
         # fix for M&Atilde;&curren;rz ...
         date = re.sub('M..rz', 'März', day.text)
@@ -132,8 +136,7 @@ if __name__ == '__main__':
     name, prices_uri, prices_map = mensae[sys.argv[1]]
     this_week, next_week = meals_uri(name)
     try:
-        prices = get_prices('http://studentenwerk-goettingen.de/' + prices_uri,
-                            prices_map)
+        prices = get_prices(BASE_HOST + '/' + prices_uri, prices_map)
     except:
         prices = None
     feed = mensa_feed(name, this_week, next_week, prices)
